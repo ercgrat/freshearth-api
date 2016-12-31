@@ -1,0 +1,38 @@
+{
+  "name": "cropolis-v2-api",
+  "version": "1.0.0",
+  "description": "API for the Cropolis application ecosystem.",
+  "main": "api.js",
+  "dependencies": {
+    "bcryptjs": "^2.3.0",
+    "bluebird": "^3.4.6",
+    "body-parser": "^1.15.2",
+    "email-validator": "^1.0.7",
+    "express": "^4.14.0",
+    "https": "^1.0.0",
+    "jwt-simple": "^0.5.0",
+    "knex": "^0.12.6",
+    "lodash": "^4.17.2",
+    "moment": "^2.15.2",
+    "mysql": "^2.12.0",
+    "nodemailer": "^2.7.0",
+    "passport": "^0.3.2",
+    "passport-jwt": "^2.1.0",
+    "passport-local": "^1.0.0",
+    "phone": "^1.0.8",
+    "request": "^2.76.0"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/cropolis/cropolis-v2-api.git"
+  },
+  "author": "Cropolis (c)",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/cropolis/cropolis-v2-api/issues"
+  },
+  "homepage": "https://github.com/cropolis/cropolis-v2-api#readme"
+}
