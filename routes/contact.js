@@ -77,7 +77,7 @@ module.exports = function(api, router, database) {
         .into('ContactGroupMember');
     }
     
-    contact.post('/create', function(req, res, next) {
+    contact.post('', function(req, res, next) {
         // Validation
         var businessTypeError = utils.checkBusinessTypes(["Consumer", "Producer"], req.user);
         if(businessTypeError) { return next(utils.generateResponseObject(businessTypeError)); }
@@ -114,6 +114,84 @@ module.exports = function(api, router, database) {
         });
     });
     
+    function getContacts(trx, businessId) {
+        return database.transacting(trx)
+        .select('Contact.id', 'Contact.name', 'Contact.email')
+        .from('Contact')
+        .join('ContactGroupMember', 'Contact.id', 'ContactGroupMember.contactMember')
+        .join('ContactGroup', 'ContactGroupMember.group', 'ContactGroup.id')
+        .where('ContactGroup.owner', businessId);
+    }
+    
+    function getContactBusinesses(trx, businessId) {
+        return database.transacting(trx)
+        .select('Business.id', 'Business.name', 'User.email')
+        .from('Business')
+        .join('User', 'Business.owner', 'User.id')
+        .join('ContactGroupMember', 'Business.id', 'ContactGroupMember.businessMember')
+        .join('ContactGroup', 'ContactGroupMember.group', 'ContactGroup.id')
+        .where('ContactGroup.owner', businessId);
+    }
+    
+    function getBusinessContactGroups(trx, businessId) {
+        return database.transacting(trx)
+        .select('id', 'name', 'custom')
+        .from('ContactGroup')
+        .where('owner', businessId);
+    }
+    
+    function getBusinessContactGroupMembers(trx, businessId) {
+        return database.transacting(trx)
+        .select('ContactGroupMember.contactMember', 'ContactGroupMember.businessMember', 'ContactGroupMember.group')
+        .from('ContactGroupMember')
+        .join('ContactGroup', 'ContactGroupMember.group', 'ContactGroup.id')
+        .where('ContactGroup.owner', businessId);
+    }
+    
+    contact.get('/business/:id', function(req, res, next) {
+        // Validation
+        var businessTypeError = utils.checkBusinessTypes(["Consumer", "Producer"], req.user);
+        if(businessTypeError) { return next(utils.generateResponseObject(businessTypeError)); }
+        
+        var businessId = req.params.id;
+        if(!utils.isValidSQLId(businessId)) {
+            var error = new Error("The id specified is not a positive integer.");
+            error.status = 400;
+            return next(utils.generateResponseObject(error));
+        }
+        
+        // Query
+        var dataCache = {};
+        database.transaction(function(trx) {
+            return getContacts(trx, businessId)
+            .then(function(contacts) {
+                dataCache.contacts = contacts;
+                return getContactBusinesses(trx, businessId);
+            })
+            .then(function(businesses) {
+                dataCache.businesses = businesses;
+                return getBusinessContactGroups(trx, businessId);
+            })
+            .then(function(groups) {
+                dataCache.groups = groups;
+                return getBusinessContactGroupMembers(trx, businessId);
+            })
+            .then(trx.commit)
+            .catch(trx.rollback);
+        })
+        .then(function(members) {
+            res.status(200).send({
+                businesses: dataCache.businesses,
+                contacts: dataCache.contacts,
+                groups: dataCache.groups,
+                members: members
+            });
+        })
+        .catch(function(error) {
+            return next(utils.generateResponseObject(error));
+        });
+    });
+    
     function createCustomContactGroup(trx, owner, name) {
         return database.transacting(trx)
         .insert({
@@ -124,7 +202,7 @@ module.exports = function(api, router, database) {
         .into('ContactGroup');
     }
     
-    contact.post('/group/create', function(req, res, next) {
+    contact.post('/group', function(req, res, next) {
         // Validation
         var businessTypeError = utils.checkBusinessTypes(["Consumer", "Producer"], req.user);
         if(businessTypeError) { return next(utils.generateResponseObject(businessTypeError)); }
@@ -150,7 +228,7 @@ module.exports = function(api, router, database) {
         });
     });
     
-    contact.post('/group/addMember', function(req, res, next) {
+    contact.post('/group/member', function(req, res, next) {
         // Validation
         var businessTypeError = utils.checkBusinessTypes(["Consumer", "Producer"], req.user);
         if(businessTypeError) { return next(utils.generateResponseObject(businessTypeError)); }
