@@ -10,7 +10,7 @@ const googleMapsClient = require('@google/maps').createClient({
 });
 
 // Parse parameters
-var port = 8012;
+var port = 8000;
 var verbose = false;
 if (process.argv.length > 2) {
     for (var i = 2; i < process.argv.length; i++) {
@@ -53,7 +53,7 @@ api.all('*', function(req, res, next) {
 // Should filter out requests to make sure they are only coming from our App
 // Testing using NPM cors package to handle Cross-Origin Requests and Preflights
 var corsOptions = {
-    origin: ['http://45.55.250.153', 'http://app.freshearth.io:8011'],
+    origin: ['http://104.236.222.199', 'http://app.freshearth.io'],
     optionsSuccessStatus: 200 // some legacy browsers (IE11, various SmartTVs) choke on 204
 };
 router.options('*', cors(corsOptions));
