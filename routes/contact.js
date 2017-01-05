@@ -199,7 +199,10 @@ module.exports = function(api, router, database) {
             name: name,
             custom: true
         }, 'id')
-        .into('ContactGroup');
+        .into('ContactGroup')
+        .then(function(rows) {
+            return rows[0];
+        });
     }
     
     contact.post('/group', function(req, res, next) {
@@ -222,6 +225,42 @@ module.exports = function(api, router, database) {
         })
         .then(function(contactGroup) {
             res.status(200).send({ id: contactGroup });
+        })
+        .catch(function(error) {
+            return next(utils.generateResponseObject(error));
+        });
+    });
+    
+    function deleteGroup(trx, id, owner) {
+        return database.transacting(trx)
+        .del()
+        .into('ContactGroup')
+        .where({
+            'id': id,
+            'owner': owner
+        });
+    }
+    
+    contact.delete('/group/:id', function(req, res, next) {
+        // Validation
+        var businessTypeError = utils.checkBusinessTypes(["Consumer", "Producer"], req.user);
+        if(businessTypeError) { return next(utils.generateResponseObject(businessTypeError)); }
+
+        var group = { id: req.params.id };
+        var paramError = utils.checkParameters(["id"], group);
+        if(paramError) { return next(utils.generateResponseObject(paramError)); }
+
+        var validationErrors = utils.typeCheck("DeleteRequest", group);
+        if(validationErrors.length > 0) { return next(utils.generateResponseObject(validationErrors)); }
+
+        // Query
+        database.transaction(function(trx) {
+            return deleteGroup(trx, group.id, req.user.businessId)
+            .then(trx.commit)
+            .catch(trx.rollback);
+        })
+        .then(function() {
+            res.status(200).send();
         })
         .catch(function(error) {
             return next(utils.generateResponseObject(error));

@@ -93,15 +93,28 @@ module.exports = function(api, router, database) {
 		})
 		.then(function() {
 			return database.transacting(trx)
-			.update({
-				'deleted': true
-			})
-			.into('ProductCategory')
-			.where({
-				'id': id,
-				'owner': owner
-			});
-		});
+            .select('Product.id')
+            .from('Product')
+            .join('ProductCategory', 'Product.category', 'ProductCategory.id');
+		})
+        .then(function(rows) {
+            if(rows.length > 0) {
+                return database.transacting(trx)
+                .update({
+                    'deleted': true
+                })
+                .into('ProductCategory')
+                .where({
+                    'id': id,
+                    'owner': owner
+                });
+            } else {
+                return database.transacting(trx)
+                .del()
+                .into('ProductCategory')
+                .where('id', id);
+            }
+        });       
 	}
 	
 	product.delete('/category/:id', function(req, res, next) {

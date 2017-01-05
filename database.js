@@ -6,8 +6,8 @@ module.exports = function(verbose) {
         connection: {
             host: '127.0.0.1',
             user: 'root',
-            password: 'croptopolis',
-            database: 'cropolis'
+            password: 'MC+lovin09',
+            database: 'freshearth'
         },
         debug: verbose
 	});
