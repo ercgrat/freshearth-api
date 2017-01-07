@@ -31,20 +31,69 @@ module.exports = function(api, router, database) {
      *
      *    Checks if the email is in the database already
      */
-    validation.route('/auth/existingEmail')
-        .get(function(req, res) {
-            res.send('GET request to /validation/auth/existingEmail');
+    validation.get('/auth/existingEmail/:email', function(req, res, next) {
+        // Validation
+        var validationObject = req.params;
+        var paramError = utils.checkParameters(["email"], validationObject);
+        if(paramError) { return next(utils.generateResponseObject(paramError)); }
+
+        var validationErrors = utils.typeCheck("EmailValidationRequest", validationObject);
+        if(validationErrors.length > 0) { res.status(200).send(false); }
+
+        // Query
+        database.transaction(function(trx) {
+            return database.transacting(trx)
+            .select('id')
+            .from('User')
+            .where('email', validationObject.email)
+            .then(function(rows) {
+                return rows.length == 0;
+            })
+            .then(trx.commit)
+            .catch(trx.rollback);
         })
-        .post(function(req, res) {
-            database.select('*')
-                .from('User')
-                .where('email', req.body.v)
-                .then(function(rows) {
-                    res.status(200).send(rows.length !== 1);
-                }).catch(function(error) {
-                    return next(utils.generateResponseObject(error));
-                });
+        .then(function(result) {
+            res.status(200).send(result);
+        })
+        .catch(function(error) {
+            return next(utils.generateResponseObject(error));
         });
+    });
+    
+    /*
+     *  Validation for contact e-mail duplicates
+     */
+    validation.get('/auth/existingContact/:email', function(req, res, next) {
+        // Validation
+        var validationObject = req.params;
+        var paramError = utils.checkParameters(["email"], validationObject);
+        if(paramError) { return next(utils.generateResponseObject(paramError)); }
+
+        var validationErrors = utils.typeCheck("EmailValidationRequest", validationObject);
+        if(validationErrors.length > 0) { return res.status(200).send(0); }
+
+        // Query
+        database.transaction(function(trx) {
+            return database.transacting(trx)
+            .select('Contact.id')
+            .from('Contact')
+            .join('ContactGroupMember', 'Contact.id', 'ContactGroupMember.contactMember')
+            .join('ContactGroup', 'ContactGroupMember.group', 'ContactGroup.id')
+            .where('Contact.email', validationObject.email)
+            .then(function(rows) {
+                return rows.length == 0;
+            })
+            .then(trx.commit)
+            .catch(trx.rollback);
+        })
+        .then(function(result) {
+            res.status(200).send(result);
+        })
+        .catch(function(error) {
+            return next(utils.generateResponseObject(error));
+        });
+    });
+    
 
     /*
      *  Validation for password

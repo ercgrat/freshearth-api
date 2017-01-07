@@ -70,28 +70,16 @@ module.exports = function(api) {
         "Contact": {
             type: "object",
             definition: {
-                "firstName": {
+                "name": {
                     type: "string",
                     required: true,
                     minLength: 1,
-                    maxLength: 45
-                },
-                "lastName": {
-                    type: "string",
-                    required: true,
-                    minLength: 1,
-                    maxLength: 45
+                    maxLength: 128
                 },
                 "email": {
                     type: "email",
                     minLength: 5,
                     maxLength: 256                    
-                },
-                "phone": {
-                    type: "phone"
-                },
-                "address": {
-                    type: "Address"
                 }
             },
             required: true,
@@ -176,6 +164,19 @@ module.exports = function(api) {
 				return [];
 			}
 		},
+        "EmailValidationRequest": {
+            type: "object",
+            definition: {
+                "email": {
+                    type: "email",
+                    required: true
+                }
+            },
+            required: true,
+            customValidation: function(name, value) {
+                return [];
+            }
+        },
         "Message": {
             type: "object",
             definition: {

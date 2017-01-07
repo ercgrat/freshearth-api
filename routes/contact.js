@@ -10,12 +10,14 @@ module.exports = function(api, router, database) {
     var contactValidator = api.get('validationRetriever')('Contact');
     
     function checkForBusiness(trx, email) {
-        return database.select('id')
+        return database.transacting(trx)
         .forShare()
+        .select('Business.id')
         .from('Business')
-        .where('email',email)
+        .join('User', 'Business.owner', 'User.id')
+        .where('User.email', email)
         .then(function(rows) {
-            if(rows.length === 1) {
+            if(rows.length == 1) {
                 return true;
             } else {
                 return false;
@@ -23,14 +25,11 @@ module.exports = function(api, router, database) {
         });
     }
     
-    function createContact(trx, contact) {
+    function createContact(trx, name, email) {
         return database.transacting(trx)
         .insert({
-            firstName: contact.firstName,
-            lastName: contact.lastName,
-            email: contact.email,
-            phone: contact.phone,
-            address: contact.address
+            name: name,
+            email: email
         }, 'id')
         .into('Contact');
     }
@@ -77,13 +76,20 @@ module.exports = function(api, router, database) {
         .into('ContactGroupMember');
     }
     
+    function addContactToDefaultGroup(trx, owner, contact) {
+        return getDefaultGroup(trx, owner)
+        .then(function(groupId) {
+            return addContactToGroup(trx, contact, groupId);
+        });
+    }
+    
     contact.post('', function(req, res, next) {
         // Validation
         var businessTypeError = utils.checkBusinessTypes(["Consumer", "Producer"], req.user);
         if(businessTypeError) { return next(utils.generateResponseObject(businessTypeError)); }
         
         var contact = req.body.v;
-        var paramError = utils.checkParameters(["firstName", "lastName", "email", "address", "phone"], contact);
+        var paramError = utils.checkParameters(["name", "email"], contact);
         if(paramError) { return next(utils.generateResponseObject(paramError)); }
         
         var validationErrors = utils.typeCheck("Contact", contact);
@@ -91,20 +97,20 @@ module.exports = function(api, router, database) {
         
         // Query
         database.transaction(function(trx) {
-            return checkForBusiness(contact.email)
+            return checkForBusiness(trx, contact.email)
             .then(function(businessExists) {
                 if(businessExists) {
                     var error = new Error("A business with that e-mail address already exists.");
                     error.status = 403;
                     throw error;
                 }
-                return createContact(trx, contact);
+                return createContact(trx, contact.name, contact.email);
             })
             .then(function(contactId) {
-                return addContactToGroup(trx, req.user.businessId, contactId, null);
+                return addContactToDefaultGroup(trx, req.user.businessId, contactId);
             })
             .then(trx.commit)
-            .then(trx.rollback);
+            .catch(trx.rollback);
         })
         .then(function(contact) {
             res.status(200).send({ id: contact });
