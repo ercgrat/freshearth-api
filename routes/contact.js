@@ -1,5 +1,6 @@
 "use strict";
 const express = require('express');
+const Promise = require('bluebird');
 
 module.exports = function(api, router, database) {
 
@@ -46,24 +47,6 @@ module.exports = function(api, router, database) {
         })
         .then(function(rows) {
             return rows[0].id;
-        });
-    }
-    
-    function checkGroupMember(trx, contact, group) {
-        return database.transacting(trx)
-        .forShare()
-        .select('id')
-        .from('ContactGroupMember')
-        .where({
-            group: group,
-            contactMember: contact
-        })
-        .then(function(rows) {
-            if(rows.length === 1) {
-                return true;
-            } else {
-                return false;
-            }
         });
     }
     
@@ -119,7 +102,7 @@ module.exports = function(api, router, database) {
             return next(utils.generateResponseObject(error));
         });
     });
-    
+	
     function getContacts(trx, businessId) {
         return database.transacting(trx)
         .select('Contact.id', 'Contact.name', 'Contact.email')
@@ -153,6 +136,82 @@ module.exports = function(api, router, database) {
         .join('ContactGroup', 'ContactGroupMember.group', 'ContactGroup.id')
         .where('ContactGroup.owner', businessId);
     }
+    
+    function deleteContactFromAllGroups(trx, id) {
+        return database.transacting(trx)
+        .select('ContactGroup.id')
+        .from('ContactGroup')
+        .join('ContactGroupMember', 'ContactGroup.id', 'ContactGroupMember.group')
+        .where('ContactGroupMember.contactMember', id)
+        .then(function(rows) {
+            return Promise.map(rows, function(group) {
+                return deleteContactFromOneGroup(trx, id, group.id);
+            });
+        })
+        .then(function() {
+            return database.transacting(trx)
+            .del()
+            .into('Contact')
+            .where('id', id);
+        });
+    }
+    
+    function deleteContactFromOneGroup(trx, id, group) {
+        return database.transacting(trx)
+		.del()
+		.into('ContactGroupMember')
+		.where({
+			'contactMember': id,
+			'group': group
+		});
+    }
+	
+	function deleteContactMember(trx, owner, contactMember, group) {
+        return database.transacting(trx)
+        .select('custom')
+        .from('ContactGroup')
+        .where({
+            'id': group,
+            'owner': owner
+        })
+        .then(function(rows) {
+            if(rows.length != 1) {
+                throw new Error("Group does not exist.");
+            }
+            var custom = rows[0].custom;
+            if(custom) {
+                return deleteContactFromOneGroup(trx, contactMember, group);
+            } else {                
+                return deleteContactFromAllGroups(trx, contactMember);
+            }
+        });
+	}
+	
+	contact.delete('/member', function(req, res, next) {
+        // Validation
+        var businessTypeError = utils.checkBusinessTypes(["Consumer", "Producer"], req.user);
+        if(businessTypeError) { return next(utils.generateResponseObject(businessTypeError)); }
+
+        var member = { contactMember: req.query.contactMember, group: req.query.group };
+        var paramError = utils.checkParameters(["contactMember", "group"], member);
+        if(paramError) { return next(utils.generateResponseObject(paramError)); }
+
+        var validationErrors = utils.typeCheck("ContactGroupMember", member);
+        if(validationErrors.length > 0) { return next(utils.generateResponseObject(validationErrors)); }
+        
+        // Query
+        database.transaction(function(trx) {
+            return deleteContactMember(trx, req.user.businessId, member.contactMember, member.group)
+            .then(trx.commit)
+            .catch(trx.rollback);
+        })
+        .then(function() {
+            res.status(200).send();
+        })
+        .catch(function(error) {
+            return next(utils.generateResponseObject(error));
+        });
+    });
     
     contact.get('/business/:id', function(req, res, next) {
         // Validation
@@ -236,7 +295,43 @@ module.exports = function(api, router, database) {
             return next(utils.generateResponseObject(error));
         });
     });
-    
+	
+	function updateGroupName(trx, owner, id, name) {
+		return database.transacting(trx)
+		.update('name', name)
+		.into('ContactGroup')
+		.where({
+			'id': id,
+			'owner': owner
+		});
+	}
+	
+    contact.put('/group', function(req, res, next) {
+		// Validation
+        var businessTypeError = utils.checkBusinessTypes(["Consumer", "Producer"], req.user);
+        if(businessTypeError) { return next(utils.generateResponseObject(businessTypeError)); }
+        
+        var group = req.body.v;
+        var paramError = utils.checkParameters(["id", "name"], group);
+        if(paramError) { return next(utils.generateResponseObject(paramError)); }
+        
+        var validationErrors = utils.typeCheck("ContactGroup", group);
+        if(validationErrors.length > 0) { return next(utils.generateResponseObject(validationErrors)); }
+        
+        // Query
+        database.transaction(function(trx) {
+            return updateGroupName(trx, req.user.businessId, group.id, group.name)
+            .then(trx.commit)
+            .catch(trx.rollback);
+        })
+        .then(function(contact) {
+            res.status(200).send();
+        })
+        .catch(function (error) {
+            return next(utils.generateResponseObject(error));
+        });
+	});
+	
     function deleteGroup(trx, id, owner) {
         return database.transacting(trx)
         .del()
@@ -273,29 +368,47 @@ module.exports = function(api, router, database) {
         });
     });
     
-    contact.post('/group/member', function(req, res, next) {
+    function checkGroupMember(trx, contact, group) {
+        return database.transacting(trx)
+        .forShare()
+        .select('*')
+        .from('ContactGroupMember')
+        .where({
+            group: group,
+            contactMember: contact
+        })
+        .then(function(rows) {
+            if(rows.length === 1) {
+                return true;
+            } else {
+                return false;
+            }
+        });
+    }
+    
+    contact.post('/member', function(req, res, next) {
         // Validation
         var businessTypeError = utils.checkBusinessTypes(["Consumer", "Producer"], req.user);
         if(businessTypeError) { return next(utils.generateResponseObject(businessTypeError)); }
         
-        var contactGroupMember = req.body.v;
-        var paramError = utils.checkParameters(["group", "contact"], contactGroupMember);
+        var member = req.body.v;
+        var paramError = utils.checkParameters(["contactMember", "group"], member);
         if(paramError) { return next(utils.generateResponseObject(paramError)); }
         
-        var validationErrors = utils.typeCheck("ContactGroupMember", contactGroupMember);
+        var validationErrors = utils.typeCheck("ContactGroupMember", member);
         if(validationErrors.length > 0) { return next(utils.generateResponseObject(validationErrors)); }
         
         // Query
         database.transaction(function(trx) {
-            return checkGroupMember(trx, contactGroupMember.contact, contactGroupMember.group);
-        })
-        .then(function(isGroupMember) {
-            if(isGroupMember) {
-                var error = new Error("This contact is already a member of this group.");
-                error.status = 403;
-                throw error;
-            }
-            return addContactToGroup(trx, contactGroupMember.contact, contactGroupMember.group);
+            return checkGroupMember(trx, member.contactMember, member.group)
+            .then(function(isGroupMember) {
+                if(isGroupMember) {
+                    throw new Error("This contact is already a member of this group.");
+                }
+                return addContactToGroup(trx, member.contactMember, member.group);
+            })
+            .then(trx.commit)
+            .catch(trx.rollback);
         })
         .then(function() {
             res.status(200).send();

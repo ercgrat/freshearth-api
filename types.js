@@ -101,6 +101,23 @@ module.exports = function(api) {
                 return [];
             }
         },
+        "ContactGroupMember": {
+            type: "object",
+            definition: {
+                "contactMember": {
+                    type: "sqlid",
+                    required: true
+                },
+                "group": {
+                    type: "sqlid",
+                    required: true
+                }
+            },
+            required: true,
+            customValidation: function(name, value) {
+                return [];
+            }
+        },
         "Conversation": {
             type: "object",
             definition: {
