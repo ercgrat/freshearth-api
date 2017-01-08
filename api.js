@@ -8,6 +8,7 @@ const passport = require('passport');
 const googleMapsClient = require('@google/maps').createClient({
     key: 'AIzaSyCDIU9SLMMHJApsZEGRd7F4VeeHgxtK4ss'
 });
+const fileSystem = require('fs');
 
 // Parse parameters
 var port = 8000;
@@ -38,8 +39,6 @@ api.set('validationRetriever', function(validator) {
     return require('./validators/' + validator + '.js')(api.get('utils'));
 });
 
-// *** Force HTTPS connection - uncomment when SSL key / cert installed ***
-/*
 api.all('*', function(req, res, next) {
     if(!req.secure) {
         return res.redirect('https://' + req.headers.host + req.url);
@@ -47,13 +46,12 @@ api.all('*', function(req, res, next) {
         next();
     }
 });
-*/
 
 // Allow Cross-Origin Requests from anywhere in the App ecosystem
 // Should filter out requests to make sure they are only coming from our App
 // Testing using NPM cors package to handle Cross-Origin Requests and Preflights
 var corsOptions = {
-    origin: ['http://104.236.222.199', 'http://app.freshearth.io'],
+    origin: ['https://104.236.222.199', 'https://app.freshearth.io'],
     optionsSuccessStatus: 200 // some legacy browsers (IE11, various SmartTVs) choke on 204
 };
 router.options('*', cors(corsOptions));
@@ -89,20 +87,17 @@ api.use(function(err, req, res, next){
 	res.status(err.status).json(err);
 });
 
-// Specify SSL key/cert filepaths
+// Specify SSL cert filepath
 var options = {
-    //key: fileSystem.readFileSync('/etc/httpd/conf/ssl.key'),
-    //cert: fileSystem.readFileSync('/etc/httpd/conf/ssl.crt')
+    hostname: 'app.freshearth.io',
+    port: 8000,
+    path: '/api',
+    method: 'GET',
+    key: fileSystem.readFileSync('/etc/letsencrypt/live/app.freshearth.io/privkey.pem'),
+    cert: fileSystem.readFileSync('/etc/letsencrypt/live/app.freshearth.io/cert.pem'),
+    secureProtocol: 'TLSv1_2_server_method'
 };
 
-// Start the server - insecure HTTP for now
-http.createServer(api).listen(port, function() {
-    console.log("Listening on port " + port + ".");
-});
-
-// *** Use this instead whenever we get SSL key / cert installed on this server ***
-/*
 https.createServer(options, api).listen(8000, function(){
     console.log("Listening on port 8000.");
 });
-*/

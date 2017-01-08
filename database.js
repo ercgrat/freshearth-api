@@ -5,8 +5,8 @@ module.exports = function(verbose) {
         client: 'mysql',
         connection: {
             host: '127.0.0.1',
-            user: 'root',
-            password: 'MC+lovin09',
+            user: 'fe-server',
+            password: 'farmersFirst#2017',
             database: 'freshearth'
         },
         debug: verbose
