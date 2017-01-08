@@ -139,21 +139,9 @@ module.exports = function(api, router, database) {
     
     function deleteContactFromAllGroups(trx, id) {
         return database.transacting(trx)
-        .select('ContactGroup.id')
-        .from('ContactGroup')
-        .join('ContactGroupMember', 'ContactGroup.id', 'ContactGroupMember.group')
-        .where('ContactGroupMember.contactMember', id)
-        .then(function(rows) {
-            return Promise.map(rows, function(group) {
-                return deleteContactFromOneGroup(trx, id, group.id);
-            });
-        })
-        .then(function() {
-            return database.transacting(trx)
-            .del()
-            .into('Contact')
-            .where('id', id);
-        });
+        .del()
+        .into('Contact')
+        .where('id', id);
     }
     
     function deleteContactFromOneGroup(trx, id, group) {
