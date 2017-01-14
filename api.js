@@ -25,7 +25,6 @@ if (process.argv.length > 2) {
 
 const router = express.Router();
 const database = require('./database.js')(verbose);
-
 const api = express();
 
 // Configure API
@@ -35,6 +34,7 @@ api.use(bodyParser.urlencoded({
 api.use(bodyParser.json());
 api.use(passport.initialize());
 api.set('utils', require('./utils.js')(api));
+api.set('amazon', require('./amazon.js')(api));
 api.set('validationRetriever', function(validator) {
     return require('./validators/' + validator + '.js')(api.get('utils'));
 });
@@ -64,11 +64,11 @@ api.use('/api', router);
 require('./routes/validation.js')(api, router, database);
 require('./routes/googleMaps.js')(api, router, database);
 require('./routes/auth.js')(api, router, database, passport);
+require('./routes/product.js')(api, router, database);
 require('./routes/contact.js')(api, router, database);
+require('./routes/broadcast.js')(api, router, database);
 require('./routes/message.js')(api, router, database);
 require('./routes/order.js')(api, router, database);
-require('./routes/product.js')(api, router, database);
-require('./routes/email.js')(api, router, database);
 
 // Catches all routes that fell through - they are not defined
 router.all('*', function(req, res, next) {

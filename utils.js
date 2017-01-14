@@ -69,6 +69,10 @@ module.exports = function(api) {
     function forEach(obj, func) {
         return _.forEach(obj, func);
     }
+    
+    function replace(string, pattern, replacement) {
+        return _.replace(string, pattern, replacement);
+    }
 
     /*
      *  Checks if value is valid SQL id (an unsigned integer)
@@ -228,6 +232,8 @@ module.exports = function(api) {
 	}
 
     function typeCheck(definitionKey, value) {
+        console.log(definitionKey);
+        console.log(value);
         var definition = typeDefinitions[definitionKey];
         return typeCheckRecursive(definition, value, definitionKey);
     }
@@ -244,8 +250,9 @@ module.exports = function(api) {
 
     function typeCheckRecursive(definition, value, name) {
         var errors = [];
+        console.log(definition);
         var type = definition.type;
-
+        console.log('defined');
         if (!isSet(value)) {
             if (definition.required) {
                 errors.push(new Error("Value '" + name + "' of type '" + type + "' is not set."));
@@ -293,8 +300,9 @@ module.exports = function(api) {
                                     errors.push(new Error("Array '" + name + "' exceeds the maximum length allowed (" + definition.maxlength + ")."));
                                 }
                             }
+                            var arrType = typeDefinitions[definition.arrType] || definition.arrType; // Try object definition, else primitive
                             for (var i = 0; i < value.length; i++) {
-                                errors = errors.concat(typeCheckRecursive(typeDefinitions[definition.arrType], value[i], name + "[" + i + "]"));
+                                errors = errors.concat(typeCheckRecursive(arrType, value[i], name + "[" + i + "]"));
                             }
                             break;
                         case "object":
@@ -448,6 +456,8 @@ module.exports = function(api) {
         includes: includes,
 
         forEach: forEach,
+        
+        replace: replace,
 
         typeCheck: typeCheck,
 

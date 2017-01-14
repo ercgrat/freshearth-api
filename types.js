@@ -34,6 +34,30 @@ module.exports = function(api) {
                 return [];
             }
         },
+        "Broadcast": {
+            type: "object",
+            definition: {
+                "recipients": {
+                    type: "array",
+                    arrType: "BroadcastRecipientContact",
+                    required: true,
+                    minLength: 1
+                }
+            },
+            required: true,
+            customValidation: function(name, value) {
+                return [];
+            }
+        },
+        "BroadcastRecipientContact": {
+            type: "object",
+            definition: {
+                "id": {
+                    type: "sqlid",
+                    required: true
+                }
+            }
+        },
         "Business": {
             type: "object",
             definition: {

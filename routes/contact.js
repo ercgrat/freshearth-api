@@ -32,7 +32,10 @@ module.exports = function(api, router, database) {
             name: name,
             email: email
         }, 'id')
-        .into('Contact');
+        .into('Contact')
+        .then(function(rows) {
+            return rows[0];
+        });
     }
     
     function getDefaultGroup(trx, owner) {
@@ -79,6 +82,7 @@ module.exports = function(api, router, database) {
         if(validationErrors.length > 0) { return next(utils.generateResponseObject(validationErrors)); }
         
         // Query
+        var dataCache = {};
         database.transaction(function(trx) {
             return checkForBusiness(trx, contact.email)
             .then(function(businessExists) {
@@ -89,14 +93,15 @@ module.exports = function(api, router, database) {
                 }
                 return createContact(trx, contact.name, contact.email);
             })
-            .then(function(contactId) {
-                return addContactToDefaultGroup(trx, req.user.businessId, contactId);
+            .then(function(contact) {
+                dataCache.contact = contact;
+                return addContactToDefaultGroup(trx, req.user.businessId, contact);
             })
             .then(trx.commit)
             .catch(trx.rollback);
         })
-        .then(function(contact) {
-            res.status(200).send({ id: contact });
+        .then(function() {
+            res.status(200).send({ id: dataCache.contact });
         })
         .catch(function (error) {
             return next(utils.generateResponseObject(error));

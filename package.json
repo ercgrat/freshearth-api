@@ -4,6 +4,7 @@
   "description": "API for the Cropolis application ecosystem.",
   "main": "api.js",
   "dependencies": {
+    "aws-sdk": "^2.7.21",
     "bcryptjs": "^2.3.0",
     "bluebird": "^3.4.6",
     "body-parser": "^1.15.2",
