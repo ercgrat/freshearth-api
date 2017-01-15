@@ -13,8 +13,9 @@ module.exports = function(api, router, database, passport, utils) {
     var auth = express.Router();
     router.use('/auth', auth);
 
-    api.set('jwtSecret', 'yMw0MZW8KXBhSxqgDK9kRHvm3qME8EY1mVf6MEPeOYke5Y8Cx0mVF9Uugn00NQa3MdfOc2skfxqegeYbePfjIToOeS7Zu3GWPb6O');
+    api.set('jwtSecret', 'TGL38nWRY1fe1TSAhjeRD2rfIY6p2i958Ps6JbZLWIAvRsAEG1Is0XhpFzqbyOMoWsCYB8923A5OAXps83FYKZoZ7sN9YGLPhGxMVTOdKhHIiy3zWoZiHm4h2tr9Xlmr');
     var utils = api.get('utils');
+    var amazon = api.get('amazon');
     var userValidator = api.get('validationRetriever')('User');
 
     function getSecurityData(password) {
@@ -67,14 +68,12 @@ module.exports = function(api, router, database, passport, utils) {
 		.then(function(rows) {
 			// Incorrect credentials
 			if (rows.length !== 1) {
-				console.log("User not found.");
 				return done(null, false);
 			}
 
 			var user = rows[0];
 			var hash = bcrypt.hashSync(password, user.salt);
 			if (user.password !== hash) {
-				console.log('Password hashing failed');
 				return done(null, false);
 			}
 
@@ -105,7 +104,6 @@ module.exports = function(api, router, database, passport, utils) {
         jwtFromRequest: passportJWTExtract.fromAuthHeader(),
         secretOrKey: api.get('jwtSecret')
     }, function(payload, done) {
-        console.log("JWT AUTHORIZING");
         // Here, need to check that the token is valid
         if (moment().isAfter(payload.expires)) {
             return next(utils.generateResponseObject('The login token has expired.'));
@@ -195,6 +193,79 @@ module.exports = function(api, router, database, passport, utils) {
             }, 'id')
             .into('ContactGroup');
     }
+    
+    function sendVerificationEmail(email) {
+        var params = {
+            Destination: {
+                BccAddresses: [ email ]
+            },
+            Message: {
+                Subject: {
+                    Data: 'Welcome to Fresh Earth!'
+                },
+                Body: {
+                    Html: {
+                        Data: amazon.ses.templates.generic("Welcome to Fresh Earth!", "Please click the link below to verify your account.", null, "VERIFY ACCOUNT", "https://app.freshearth.io/verify/" + getVerificationToken(email))
+                    }
+                }
+            },
+            Source: 'Fresh Earth <noreply@freshearth.io>'
+        };
+        amazon.ses.connection.sendEmail(params, function(error, data) {
+            if(error) {
+                console.log(error);
+            }
+        });
+    }
+    
+    function verifyUser(trx, email) {
+        return database.transacting(trx)
+        .select('verified')
+        .from('User')
+        .where('email', email)
+        .then(function(rows) {
+            if(rows.length != 1) {
+                throw new Error("No user with that e-mail exists.");
+            } else {
+                if(rows[0].verified == true) {
+                    return true;
+                } else {
+                    return database.transacting(trx)
+                    .update('verified', 1)
+                    .into('User')
+                    .where('email', email);
+                }
+            }
+        });
+    }
+    
+    auth.put('/verify/:token', function(req, res, next) {
+        // Validation
+        var paramError = utils.checkParameters(['token'], req.params);
+        if(paramError) {
+            return next(utils.generateResponseObject(paramError));
+        }
+        
+        var token = jwt.decode(req.params.token, api.get('jwtSecret'));
+        if(!utils.isSet(token.expires) || !utils.isSet(token.email)) {
+            return next(utils.generateResponseObject(new Error("The verification token is missing data.")));
+        } else if(moment().isAfter(token.expires)) {
+            return next(utils.generateResponseObject(new Error("The verification token has expired.")));
+        }
+        
+        // Query
+        database.transaction(function(trx) {
+            return verifyUser(trx, token.email)
+            .then(trx.commit)
+            .catch(trx.rollback);
+        })
+        .then(function() {
+            res.status(200).send();
+        })
+        .catch(function(error) {
+            return next(utils.generateResponseObject(error));
+        });
+    });
 
     auth.post('/signupAsFarm', function(req, res, next) {
         var requiredArgs = ['businessName', 'businessAddress', 'businessPhone', 'businessHeadline'].concat(userValidator.requiredArgs);
@@ -240,6 +311,7 @@ module.exports = function(api, router, database, passport, utils) {
                 .then(trx.commit)
                 .catch(trx.rollback);
         }).then(function() {
+            sendVerificationEmail(req.body.v.email);
             res.status(200).send();
         }).catch(function(error) {
             return next(utils.generateResponseObject(error));
@@ -299,6 +371,7 @@ module.exports = function(api, router, database, passport, utils) {
                 .then(trx.commit)
                 .catch(trx.rollback);
         }).then(function() {
+            sendVerificationEmail(req.body.v.email);
             res.status(200).send();
         }).catch(function(error) {
             return next(utils.generateResponseObject(error));
@@ -313,56 +386,24 @@ module.exports = function(api, router, database, passport, utils) {
             token: getAuthToken(req.user.id, req.user.email, req.user.verified, req.user.admin, req.user.businessId, req.user.businessType, expires),
             expires: expires
         });
+    }); 
+        
+    auth.get('/verify/resend', passport.authenticate('jwt', {
+        session: false
+    }), function(req, res, next) {
+        if(!req.user.verified) {
+            sendVerificationEmail(req.user.email);
+            res.status(200).send();
+        } else {
+            return next(utils.generateResponseObject(new Error("The requesting user is already verified.")));
+        }        
     });
-
-    auth.get('/verifyUser', function(req, res, next) {
-        var paramError = utils.checkParameters(['email', 'verificationCode'], req.query);
-        if (paramError) {
-            return next(utils.generateResponseObject(paramError));
-        };
-
-        var validationErrors = utils.typeCheck("UserVerification", req.query);
-        if (validationErrors.length > 0) {
-            return next(utils.generateResponseObject(validationErrors));
-        }
-
-        var token = "";
-        try {
-            JSON.parse(jwt.decode(req.query.verificationCode, api.get('jwtSecret')));
-        } catch (error) {
-            return next(utils.generateResponseObject(error, 400));
-        }
-        if (!isSet(token.email) || !isSet(token.expires)) {
-            return next(utils.generateResponseObject("Invalid verification code."), 400);
-        }
-
-        if (moment().isAfter(token.expires)) {
-            return next(utils.generateResponseObject("Verification code has expired."), 403);
-        }
-
-        database.transaction(function(trx) {
-                return database.transacting(trx)
-                    .update({
-                        verified: 1
-                    })
-                    .into('User')
-                    .where('email', req.query.email)
-                    .then(trx.commit)
-                    .catch(trx.rollback);
-            })
-            .then(function() {
-                res.status(200).send();
-            })
-            .catch(function(error) {
-                return utils.generateResponseObject(error);
-            });
-    });
-
+    
     router.all('/*', passport.authenticate('jwt', {
         session: false
     }), function(req, res, next) {
         return next();
-    });
+    });  
 
     router.post('/*', function(req, res, next) {
         if (!utils.isSet(req.body.v)) {
